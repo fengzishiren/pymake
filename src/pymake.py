@@ -9,7 +9,9 @@ import os
 import hashlib
 import logging
 import sys
-from settings import Compiler, Output, Input, Target
+from settings import COMPILER, OUTPUT, INPUT, TARGET
+from lib2to3.btm_utils import rec_test
+from debian.debtags import output
 
 
 '''
@@ -22,6 +24,8 @@ from settings import Compiler, Output, Input, Target
 
 
 MAKE_FILE = '.mk'
+
+DIFF_FILES = {}
 # HEAD_REGEX = r'^#include "(\w+.h)"$'
 
 logger = logging.getLogger(__name__)
@@ -66,45 +70,10 @@ class Recorder(object):
         with open(MAKE_FILE, "r") as f:
             return json.loads(f.read())    
 
-
-class Compile(object):
-    # g++ -O0 -g3 -Wall -c -fmessage-length=0 
-    COMPILE_CMD = '%(name)s -O%(opt)s -g%(debug)s %(warn)s -c %(other)s -o %(out)s %(input)s'
-    LINK_CMD = '%(name)s -o %(target)s %(inputs)s'
-    def __init__(self):
-        self.command = {}
-        self.command['name'] = Compiler['name']
-        
-        opt = Compiler.get('optimization')
-        deb = Compiler.get('debugging')
-        warn = Compiler.get('warning')
-        other = Compiler.get('other')
-        
-        self.command['opt'] = opt if opt else 0
-        self.command['debug'] = deb if deb else 0
-        self.command['warn'] = '-Wall' if warn and warn == True else ''
-        self.command['other'] = other if other else ''
-        
-    def __str__(self, *args, **kwargs):
-        out = lambda arg: os.path.join(Output, arg.split('.')[0] + '.o')
-        _input = lambda arg: os.path.join(Input, arg)
-        
-        tasks = []
-        for arg in args:
-            self.command['out'] = out(arg)
-            self.command['input'] = _input(arg)
-            tasks.append(self.COMPILE_CMD % self.command)
-
-        self.command['inputs'] = ' '.join(map(out, args))
-        self.command.update(kwargs)
-        tasks.append(self.LINK_CMD %  self.command)
-        return tasks
-         
-
 def get_content(fn):
     with open(fn, "r") as f:
         content = f.read()
-    return (fn, content)
+    return content
 
         
 class HeadSet(object):
@@ -139,37 +108,26 @@ class HeadSet(object):
         # return set(dotcc)  # filter distinct
         return dotcc
         
-        
     def search_refs(self, fn):
         refs = self.table.get(fn)
         return refs if refs else set()
         
         
     
-def get_diffs(hs=HeadSet(), _dir='.', origin={}):
+def get_diffs(origin={}, _dir=INPUT):
     # os.path.walk(top, func, arg)
     # get_content = lambda x: with open(x, "r") as f.read()
     logger.debug(os.listdir(_dir))
-    name_conts = [get_content(name) for name in os.listdir(_dir) if name.endswith('.h') or name.endswith('.cc')]
+    name_conts = [(name, get_content(os.path.join(_dir, name))) for name in os.listdir(_dir) if name.endswith('.h') or name.endswith('.cc')]
     logger.debug('files: %s' % str(zip(*name_conts)[0]))
-    # get head files
-    head_files = zip(*filter(lambda (name, _): name.endswith('.h'), name_conts))[0]
-    for hf in head_files:
-        include = '#include "%s"' % hf
-        # [k, v for k, v in name_conts if k != name]
-        # relfs = zip(*filter(lambda (name, cont): name != hf and cont.find(include) != -1, name_conts))[0]
-        relfs = zip(*filter(lambda (name, cont): cont.find(include) != -1, name_conts))[0]
-        # logger.debug('rels', relfs
-        hs.add_refs(hf, relfs)
         
-    hs.adjust_refs()
-    logger.debug('adjust: %s' % str(hs.table))
-    
-    prints = [(name, hashlib.sha1(cont).hexdigest()) for name, cont in name_conts]
-
     eq = lambda (name, pin): origin.get(name) != pin
-    diff_files = zip(*filter(eq, prints))[0]
+    prints = {name: hashlib.sha1(cont).hexdigest() for name, cont in name_conts}
     
+    global DIFF_FILES
+    DIFF_FILES.update(prints)
+    
+    diff_files = zip(*filter(eq, prints.items()))[0]
     logger.debug('diff: %s' % str(diff_files))
     
     compiles = list(filter(lambda name: name.endswith('.cc'), diff_files))
@@ -178,17 +136,88 @@ def get_diffs(hs=HeadSet(), _dir='.', origin={}):
     diff_hfiles = filter(lambda name: name.endswith('.h'), diff_files)
     logger.debug('h will: %s' % str(diff_hfiles))
     
+    # get head files
+    head_files = zip(*filter(lambda (name, _): name.endswith('.h'), name_conts))[0]
+    hs = HeadSet()
+    for hf in head_files:
+        include = '#include "%s"' % hf
+        # [k, v for k, v in name_conts if k != name]
+        # relfs = zip(*filter(lambda (name, cont): name != hf and cont.find(include) != -1, name_conts))[0]
+        rels = filter(lambda (name, cont): cont.find(include) != -1, name_conts)
+        if rels.__len__() == 0:
+            continue
+        relfs = zip(*rels)[0]
+        # logger.debug('rels', relfs
+        hs.add_refs(hf, relfs)
+
+    hs.adjust_refs()
+    logger.debug('adjust: %s' % str(hs.table))
+    
     for difls in [hs.search_refs(hf) for hf in diff_hfiles]:
         compiles.extend(difls)
         
     logger.debug('compiles: %s' % str(set(compiles)))
-    
     return set(compiles)
 
-    
+
+class CompileInfo(object):
+    # g++ -O0 -g3 -Wall -c -fmessage-length=0 
+    COMPILE_CMD = '%(name)s -O%(opt)s -g%(debug)s %(warn)s -c %(other)s -o %(out)s %(input)s'
+    LINK_CMD = '%(name)s -o %(target)s %(inputs)s'
+    def __init__(self):
+        self.command = {}
+        self.command['name'] = COMPILER['name']
+        
+        opt = COMPILER.get('optimization')
+        deb = COMPILER.get('debugging')
+        warn = COMPILER.get('warning')
+        other = COMPILER.get('other')
+        
+        self.command['opt'] = opt if opt else 0
+        self.command['debug'] = deb if deb else 0
+        self.command['warn'] = '-Wall' if warn and warn == True else ''
+        self.command['other'] = other if other else ''
+        
+    def get_tasks(self, argls, *args, **kwargs):
+        '''
+        生成编译命令的条件：目标文件依赖的源代码文件有变化（包括新建）或者.o文件不存在
+        返回有变化且即将编译的文件名称和编译项目列表
+        '''
+        out = lambda arg: os.path.join(OUTPUT, arg.split('.')[0] + '.o')
+        _in = lambda arg: os.path.join(INPUT, arg)
+        
+        if not os.path.exists(OUTPUT):
+            os.mkdir(OUTPUT)
+        if not os.path.exists(INPUT):
+            raise Exception('Dir Not Found "%s"' % INPUT)
+            
+        tasks, upfiles = [], []
+        for arg in args:
+            dots = _in(arg)
+            if not os.path.exists(dots):
+                raise Exception('File Not Found "%s"' % dots)
+            doto = out(arg)
+            if arg in argls or not os.path.exists(doto):
+                if arg in argls:
+                    upfiles.append(arg) 
+                self.command['out'] = doto
+                self.command['input'] = dots
+                tasks.append(self.COMPILE_CMD % self.command)
+
+        self.command['inputs'] = ' '.join(map(out, args))
+        self.command.update(kwargs)
+        tasks.append(self.LINK_CMD % self.command)
+        return (tasks, upfiles)
+
+
 def execute(tasks=[]):
-    doit = lambda task: os.popen(task).read()
+    # doit = lambda task: os.popen(task).read()
+    doit = lambda x:x
     return '\n'.join(map(doit, tasks))    
+
+def say(x):
+    print x
+    return x
 
 def main(*args, **kwargs):
     pass
@@ -196,14 +225,14 @@ def main(*args, **kwargs):
 if __name__ == '__main__':
 #     data = fingerprint()
 #     logger.debug(data
-#     recorder = Recorder()
-#     recorder.write(data)
-#     logger.debug(re.findall(HEAD_REGEX, getstring("main.cc"), re.M)
-    # data = deserialize()
-#     fingerprint()
-#     s = os.popen('ls -al').read()
-    tasks = Compile().__str__(*Target['hello.exe'], target = 'hello.exe')
+    recorder = Recorder()
+    origin = recorder.read()
+    diffs = get_diffs(origin)
+    tasks, upfiles = CompileInfo().get_tasks(diffs, *TARGET['hello.exe'], target='hello.exe')
     rv = execute(tasks)
     print rv
+    updata= {name: pin for name, pin in DIFF_FILES.items() if name in upfiles}
+    print updata
+    #recorder.update(updata)
     logger.debug('end')
     
