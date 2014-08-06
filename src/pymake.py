@@ -25,7 +25,7 @@ from debian.debtags import output
 
 MAKE_FILE = '.mk'
 
-DIFF_FILES = {}
+FILE_PINS = {}
 # HEAD_REGEX = r'^#include "(\w+.h)"$'
 
 logger = logging.getLogger(__name__)
@@ -61,8 +61,10 @@ class Recorder(object):
         with open(MAKE_FILE, "w") as f:
             f.write(json.dumps(data));
             
-    def update(self, data={}):    
-        self.write(data)
+    def update(self, data={}):
+        _data = self.read()  
+        _data.update(data)
+        self.write(_data)
         
     def read(self):
         if not os.path.exists(MAKE_FILE):
@@ -124,8 +126,8 @@ def get_diffs(origin={}, _dir=INPUT):
     eq = lambda (name, pin): origin.get(name) != pin
     prints = {name: hashlib.sha1(cont).hexdigest() for name, cont in name_conts}
     
-    global DIFF_FILES
-    DIFF_FILES.update(prints)
+    global FILE_PINS
+    FILE_PINS.update(prints)
     
     diff_files = zip(*filter(eq, prints.items()))[0]
     logger.debug('diff: %s' % str(diff_files))
@@ -231,8 +233,8 @@ if __name__ == '__main__':
     tasks, upfiles = CompileInfo().get_tasks(diffs, *TARGET['hello.exe'], target='hello.exe')
     rv = execute(tasks)
     print rv
-    updata= {name: pin for name, pin in DIFF_FILES.items() if name in upfiles}
+    updata = {name: pin for name, pin in FILE_PINS.items() if name in upfiles}
     print updata
-    #recorder.update(updata)
+    recorder.update(updata)
     logger.debug('end')
     
