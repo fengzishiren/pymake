@@ -102,8 +102,7 @@ class HeadSet(object):
         获取包含该头文件的所有源文件
         '''
         # check processed return empty list 
-        # logger.debug(doth, self.passed
-        if doth in self.passed:
+        if doth in self.passed: #循环引用
             return list()
         refs = self.search_refs(doth)
         # maybe sytanx error!
@@ -117,7 +116,7 @@ class HeadSet(object):
             for ls in [self.__adjust(doth) for doth in doths]:
                 dotcc.extend(ls)
         # return set(dotcc)  # filter distinct
-        return dotcc
+        return set(dotcc) #间接引用
         
     def search_refs(self, fn):
         refs = self.table.get(fn)
