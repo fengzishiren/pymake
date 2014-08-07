@@ -10,6 +10,7 @@ import hashlib
 import logging
 import sys
 from settings import COMPILER, OUTPUT, INPUT, TARGET
+import ConfigParser
 
 
 '''
@@ -20,7 +21,7 @@ from settings import COMPILER, OUTPUT, INPUT, TARGET
 
 
 更详细的说：
-        只编译目标文件依赖的所有文件 （其他文件忽略） 
+        编译所有存在更新的源文件和受引用更新文件的源文件
         如果文件已经编译并且没有再更新过  什么也不做
         如果文件已经编译但有新的更新 重新编译
         如果文件没有编译过 （即.o文件不存在），不管是否更新 编译
@@ -59,6 +60,19 @@ def get_logger(cls, name):
     logger.addHandler(ch)
     
     return logger
+
+class Config:
+    parser = ConfigParser.ConfigParser()
+    parser.read('build.cfg')
+    @classmethod
+    def get(cls, section, option):
+        return cls.parser.get(section, option)
+    @classmethod
+    def sections(cls):
+        return cls.parser.sections()
+    @classmethod
+    def options(cls, section):
+        return cls.parser.options(section)
     
 class Recorder(object):
 
@@ -133,16 +147,13 @@ class HeadSet(object):
     
 def get_diffs(origin={}, _dir=INPUT):
     '''
-     获取该目录下所有更新的源文件以及包含更新源文件的源文件
+     获取指定目录下所有更新的源文件以及包含更新源文件的源文件
     '''
-    # os.path.walk(top, func, arg)
-    # get_content = lambda x: with open(x, "r") as f.read()
     logger.debug('Dir: %s', ' '.join(os.listdir(_dir)))
     name_conts = [(name, get_content(os.path.join(_dir, name))) for name in os.listdir(_dir) if name.endswith('.h') or name.endswith('.cc')]
     logger.debug('List of files: %s' % str(zip(*name_conts)[0]))
         
     prints = {name: hashlib.sha1(cont).hexdigest() for name, cont in name_conts}
-    # 保存所有文件的最新指纹
     global FILE_PINS
     FILE_PINS.update(prints)
     # 比对原始和最新的指纹 过滤出所有变化的文件
@@ -169,9 +180,9 @@ def get_diffs(origin={}, _dir=INPUT):
         compiles.extend(difls)
         
     logger.debug('List of affected files: %s', ''.join(set(compiles)))
-    return set(compiles)
+    return {}.fromkeys(compiles).keys()
 
-
+    
 class CommandBuilder(object):
     # g++ -O0 -g3 -Wall -c -fmessage-length=0 
     COMPILE_CMD = '%(name)s -O%(opt)s -g%(debug)s %(warn)s -c %(other)s -o %(out)s %(input)s'
@@ -190,57 +201,40 @@ class CommandBuilder(object):
         self.command['warn'] = '-Wall' if warn and warn == True else ''
         self.command['other'] = other if other else ''
         
-        self.upfiles = set()
         
-    def __get_comand(self, diffs, *depends, **target):
-        '''
-        生成编译命令的条件：目标文件依赖的源代码文件有变化（包括新建）或者.o文件不存在
-        返回有变化且即该次编译依赖的文件名称和编译项目列表
-        
-        
-        只编译目标文件依赖的所有文件 （其他文件忽略） 
-        如果文件已经编译并且没有再更新过  什么也不做
-        如果文件已经编译但有新的更新 重新编译
-        如果文件没有编译过 （即.o文件不存在），不管是否更新 编译
-        '''
+    def build_commands(self, diffs, target):
+        comps = self.__merge(diffs, target)
         out = lambda arg: os.path.join(OUTPUT, arg.split('.')[0] + '.o')
         _in = lambda arg: os.path.join(INPUT, arg)
-        
-        if not os.path.exists(OUTPUT):
-            os.mkdir(OUTPUT)
-        if not os.path.exists(INPUT):
-            raise Exception('Dir Not Found "%s"' % INPUT)
-            
         tasks = []
-        for arg in depends:
-            dots = _in(arg)
+        for fn in comps:
+            dots = _in(fn)
             if not os.path.exists(dots):
                 raise Exception('File Not Found "%s"' % dots)
-            doto = out(arg)
-            if arg in diffs or not os.path.exists(doto):
-                # 如果编译依赖的文件在变更的文件当中 就加入更新文件列表
-                if arg in diffs:
-                    self.upfiles.add(arg) 
-                self.command['out'] = doto
-                self.command['input'] = dots
-                tasks.append(self.COMPILE_CMD % self.command)
-
-        self.command['inputs'] = ' '.join(map(out, depends))
-        self.command.update(target)
+            doto = out(fn)
+            self.command['out'] = doto
+            self.command['input'] = dots
+            tasks.append(self.COMPILE_CMD % self.command)
         
-        tasks.append(self.LINK_CMD % self.command)
-        return tasks
+        for fn, deps in target.items():
+            self.command['inputs'] = ' '.join(map(out, deps))
+            self.command['target'] = fn
+            tasks.append(self.LINK_CMD % self.command)
+            
+        return tasks;
     
-    def build_commands(self, diffs, targets={}):
-        '''
-                        获取命令列表和待更新的文件列表
-        '''
-        task_list = [self.__get_comand(diffs, *v, target=k) for k, v in targets.items()]
-        body = reduce(lambda x, y: x + y, map(lambda ls: ls[0:-1], task_list))
-        tail = reduce(lambda x, y: x + y, map(lambda ls: ls[-1:], task_list))
-        # return body + tail
-        return ({}.fromkeys(body).keys() + tail, self.upfiles)
     
+    def __merge(self, diffs, target):
+        '''
+        合并受更新影响的文件和编译依赖文件
+        依赖文件编译要求： 如果依赖文件没有受到更新影响 而且.o文件存在则什么也不做 否则编译依赖文件
+        '''
+        comps = diffs
+        depends = set(reduce(lambda x, y: x + y, target.values()))
+        out = lambda arg: os.path.join(OUTPUT, arg.split('.')[0] + '.o')
+        comps.extend([dep for dep in depends if dep not in diffs and not os.path.exists(out(dep))])
+        return comps        
+            
 
 def execute(tasks=[]):
     # doit = lambda task: os.popen(task).read()
@@ -252,25 +246,28 @@ def say(x):
     return x
 
 def main(*args, **kwargs):
+    """
+    1.提取所有原始文件指纹信息
+    2.和当前目录的文件指纹进行对比找到更新的文件
+    3.通过引用关系推断出直接或间接受到影响的文件
+    4.合并编译所需的依赖文件和受到影响的文件
+    5.生成编译器命令
+    6.执行生成的命令
+    7.将最新的指纹信息保存到文件
+    """
     recorder = Recorder()
     builder = CommandBuilder()
 
     origin = recorder.read()
     diffs = get_diffs(origin)
     
-    tasks, upfiles = builder.build_commands(diffs, TARGET)
+    tasks = builder.build_commands(diffs, TARGET)
     # tasks, upfiles = CommandBuilder().__get_comand(diffs, *TARGET['hello.exe'], target='hello.exe')
     rv = execute(tasks)
     print 'rv:\n', rv, '\n'
-    # 从缓存中提取upfile的指纹
-    updata = {name: pin for name, pin in FILE_PINS.items() if name in upfiles}
-    print updata
-    # recorder.update(updata)
+    # recorder.update(FILE_PINS)
 
 if __name__ == '__main__':
-#     data = fingerprint()
-#     logger.debug(data
-
-    # recorder.update(updata)
+    main()
     logger.debug('end')
     
