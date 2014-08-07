@@ -40,19 +40,19 @@ ch = logging.StreamHandler(sys.stdout)
 ch.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 ch.setLevel(logging.DEBUG)
 logger.addHandler(ch)
-
-class Config:
-    parser = ConfigParser.ConfigParser()
-    parser.read('build.cfg')
-    @classmethod
-    def get(cls, section, option):
-        return cls.parser.get(section, option)
-    @classmethod
-    def sections(cls):
-        return cls.parser.sections()
-    @classmethod
-    def options(cls, section):
-        return cls.parser.options(section)
+# 
+# class Config:
+#     parser = ConfigParser.ConfigParser()
+#     parser.read('build.cfg')
+#     @classmethod
+#     def get(cls, section, option):
+#         return cls.parser.get(section, option)
+#     @classmethod
+#     def sections(cls):
+#         return cls.parser.sections()
+#     @classmethod
+#     def options(cls, section):
+#         return cls.parser.options(section)
     
 class Recorder(object):
 
@@ -257,6 +257,7 @@ def main(*args, **kwargs):
     recorder.update(FILE_PINS)
 
 if __name__ == '__main__':
+    logger.debug('start')
     main()
     logger.debug('end')
     
