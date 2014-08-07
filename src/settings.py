@@ -11,8 +11,8 @@ COMPILER = {'name': 'gcc',
            'other': '-fmessage-length=0'}
 
 TARGET = {'hello.exe': ('main.cc', 'lexer.cc', 'engine.cc', 'alarm.cc'),
-          'test.exe': ('', '', '', ''),
-          'test1.exe': ('', '', '', '')}
+          'test.exe': ('lexer.cc', 'engine.cc', 'alarm.cc'),
+          }
 
 INPUT = '../src'
 OUTPUT = '../debug'
