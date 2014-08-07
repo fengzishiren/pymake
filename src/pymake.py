@@ -71,6 +71,9 @@ class Recorder(object):
         with open(MAKE_FILE, "r") as f:
             return json.loads(f.read())    
 
+def get_timestamp(fn):
+    return os.path.getmtime(fn)
+
 def get_content(fn):
     with open(fn, "r") as f:
         content = f.read()
@@ -102,21 +105,21 @@ class HeadSet(object):
         获取包含该头文件的所有源文件
         '''
         # check processed return empty list 
-        if doth in self.passed: #循环引用
+        if doth in self.passed:  # 循环引用
             return list()
         refs = self.search_refs(doth)
         # maybe sytanx error!
-        if refs.__len__() == 0:
+        if not refs:
             return list()
         dotcc = filter(lambda it: it.endswith('.cc'), refs)
         doths = filter(lambda it: it.endswith('.h'), refs)
         # add passed
         self.passed.add(doth)
-        if doths.__len__():
+        if doths:
             for ls in [self.__adjust(doth) for doth in doths]:
                 dotcc.extend(ls)
         # return set(dotcc)  # filter distinct
-        return set(dotcc) #间接引用
+        return set(dotcc)  # 间接引用
         
     def search_refs(self, fn):
         refs = self.table.get(fn)
@@ -129,30 +132,33 @@ def get_diffs(origin={}, _dir=INPUT):
      获取指定目录下所有更新的源文件以及包含更新源文件的源文件
     '''
     logger.debug('Dir: %s', ' '.join(os.listdir(_dir)))
-    name_conts = [(name, get_content(os.path.join(_dir, name))) for name in os.listdir(_dir) if name.endswith('.h') or name.endswith('.cc')]
-    logger.debug('List of files: %s' % str(zip(*name_conts)[0]))
-        
-    prints = {name: hashlib.sha1(cont).hexdigest() for name, cont in name_conts}
+    
+    files = [name for name in os.listdir(_dir) if name.endswith('.h') or name.endswith('.cc')]
+    logger.debug('List of files: %s' % ' '.join(files))
+    
+    # name_conts = [(name, get_content(name)) for name in files]
+    prints = {name: get_timestamp(os.path.join(_dir, name)) for name in files}
     global FILE_PINS
     FILE_PINS.update(prints)
-    # 比对原始和最新的指纹 过滤出所有变化的文件
-    eq = lambda (name, pin): origin.get(name) != pin
-    diff_pins = filter(eq, prints.items())
-    if diff_pins.__len__() == 0:
-        logger.debug('ret empty list')
+    # 比对原始和最新的时间戳 过滤出所有变化的文件
+    diff_pins = filter(lambda (name, pin): origin.get(name, 0.0) < pin, prints.items())
+    if not diff_pins:
+        logger.warn('No files changed!')
         return []
     
     diff_files = zip(*diff_pins)[0]
     logger.debug('List of changed files: %s', ' '.join(diff_files))
-    
+
     compiles = list(filter(lambda name: name.endswith('.cc'), diff_files))
+    
+    hs = HeadSet()
     diff_hfiles = filter(lambda name: name.endswith('.h'), diff_files)
     # 找出所有更新的头文件的所有关联文件
-    hs = HeadSet()
+    file_conts = [get_content(os.path.join(_dir, name)) for name in files]
     for hf in diff_hfiles:
         include = '#include "%s"' % hf
-        rels = filter(lambda (name, cont): cont.find(include) != -1, name_conts)
-        if rels.__len__() == 0:
+        rels = filter(lambda cont: cont.find(include) != -1, file_conts)
+        if not rels:
             continue
         relfs = zip(*rels)[0]
         # logger.debug('rels', relfs
@@ -219,6 +225,7 @@ class CommandBuilder(object):
         logger.debug('depends: %s', ' '.join(depends))
         out = lambda arg: os.path.join(OUTPUT, arg.split('.')[0] + '.o')
         logger.debug('comps: %s', ' '.join(comps))
+        #comps.extend()
         comps.extend([dep for dep in depends if dep not in diffs and not os.path.exists(out(dep))])
         logger.debug('extend comps: %s', ' '.join(comps))
         return comps        
@@ -235,13 +242,13 @@ def say(x):
 
 def main(*args, **kwargs):
     """
-    1.提取所有原始文件指纹信息
-    2.和当前目录的文件指纹进行对比找到更新的文件
+    1.提取所有原始文件时间戳信息
+    2.和当前目录的文件时间戳进行对比找到更新的文件
     3.通过引用关系推断出直接或间接受到影响的文件
     4.合并编译所需的依赖文件和受到影响的文件
     5.生成编译器命令
     6.执行生成的命令
-    7.将最新的指纹信息保存到文件
+    7.将最新的时间戳信息保存到文件
     """
     recorder = Recorder()
     builder = CommandBuilder()
@@ -253,7 +260,7 @@ def main(*args, **kwargs):
     # tasks, upfiles = CommandBuilder().__get_comand(diffs, *TARGET['hello.exe'], target='hello.exe')
     rv = execute(tasks)
     print 'rv:\n', rv, '\n'
-    recorder.update(FILE_PINS)
+    # recorder.update(FILE_PINS)
 
 if __name__ == '__main__':
     logger.debug('start')
