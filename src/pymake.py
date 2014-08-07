@@ -6,25 +6,29 @@ Created on 2014年8月5日
 '''
 import json
 import os
-import hashlib
 import logging
 import sys
 from settings import COMPILER, OUTPUT, INPUT, TARGET
-import ConfigParser
 
 
 '''
-规则是：
-1）如果这个工程没有编译过，那么我们的所有C 文件都要编译并被链接。
-2）如果这个工程的某几个C 文件被修改，那么我们只编译被修改的C 文件，并链接目标程序。
-3）如果这个工程的头文件被改变了，那么我们需要编译引用了这几个头文件的C 文件，并链接目标程序。
-
-
+编译所有更新或受到更新影响的文件
+编译编译依赖且不存在.o的文件
 更详细的说：
-        编译所有存在更新的源文件和受引用更新文件的源文件
+        编译所有存在更新的源文件和受引用更新文件的源文件以及编译依赖不存在.o文件的源文件
         如果文件已经编译并且没有再更新过  什么也不做
         如果文件已经编译但有新的更新 重新编译
         如果文件没有编译过 （即.o文件不存在），不管是否更新 编译
+        
+        
+处理步骤：
+    1.提取所有原始文件时间戳信息
+    2.和当前目录的文件时间戳进行对比找到更新的文件
+    3.通过引用关系推断出直接或间接受到影响的文件
+    4.合并编译所需的依赖文件和受到影响的文件
+    5.生成编译器命令
+    6.执行生成的命令
+    7.将最新的时间戳信息保存到文件
 '''
 
 
@@ -231,36 +235,28 @@ class CommandBuilder(object):
         return comps        
             
 
-def execute(tasks=[]):
-    # doit = lambda task: os.popen(task).read()
+def execute(cmds=[]):
+    # doit = lambda task: os.popen(cmd).read()
     doit = lambda x:x
-    return '\n'.join(map(doit, tasks))    
+    return '\n'.join(map(doit, cmds))    
 
 def say(x):
     print x
     return x
 
 def main(*args, **kwargs):
-    """
-    1.提取所有原始文件时间戳信息
-    2.和当前目录的文件时间戳进行对比找到更新的文件
-    3.通过引用关系推断出直接或间接受到影响的文件
-    4.合并编译所需的依赖文件和受到影响的文件
-    5.生成编译器命令
-    6.执行生成的命令
-    7.将最新的时间戳信息保存到文件
-    """
+
     recorder = Recorder()
     builder = CommandBuilder()
 
     origin = recorder.read()
     diffs = get_diffs(origin)
     
-    tasks = builder.build_commands(diffs, TARGET)
+    cmds = builder.build_commands(diffs, TARGET)
     # tasks, upfiles = CommandBuilder().__get_comand(diffs, *TARGET['hello.exe'], target='hello.exe')
-    rv = execute(tasks)
+    rv = execute(cmds)
     print 'rv:\n', rv, '\n'
-    # recorder.update(FILE_PINS)
+    recorder.update(FILE_PINS)
 
 if __name__ == '__main__':
     logger.debug('start')
