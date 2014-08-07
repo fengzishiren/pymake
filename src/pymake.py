@@ -158,7 +158,12 @@ def get_diffs(origin={}, _dir=INPUT):
     FILE_PINS.update(prints)
     # 比对原始和最新的指纹 过滤出所有变化的文件
     eq = lambda (name, pin): origin.get(name) != pin
-    diff_files = zip(*filter(eq, prints.items()))[0]
+    diff_pins = filter(eq, prints.items())
+    if diff_pins.__len__() == 0:
+        logger.debug('ret empty list')
+        return []
+    
+    diff_files = zip(*diff_pins)[0]
     logger.debug('List of changed files: %s', ' '.join(diff_files))
     
     compiles = list(filter(lambda name: name.endswith('.cc'), diff_files))
@@ -230,9 +235,13 @@ class CommandBuilder(object):
         依赖文件编译要求： 如果依赖文件没有受到更新影响 而且.o文件存在则什么也不做 否则编译依赖文件
         '''
         comps = diffs
+        logger.debug('merge diff and depends')
         depends = set(reduce(lambda x, y: x + y, target.values()))
+        logger.debug('depends: %s', ' '.join(depends))
         out = lambda arg: os.path.join(OUTPUT, arg.split('.')[0] + '.o')
+        logger.debug('comps: %s', ' '.join(comps))
         comps.extend([dep for dep in depends if dep not in diffs and not os.path.exists(out(dep))])
+        logger.debug('extend comps: %s', ' '.join(comps))
         return comps        
             
 
