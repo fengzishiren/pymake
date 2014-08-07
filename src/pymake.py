@@ -265,7 +265,7 @@ def main(*args, **kwargs):
     # tasks, upfiles = CommandBuilder().__get_comand(diffs, *TARGET['hello.exe'], target='hello.exe')
     rv = execute(tasks)
     print 'rv:\n', rv, '\n'
-    # recorder.update(FILE_PINS)
+    recorder.update(FILE_PINS)
 
 if __name__ == '__main__':
     main()
