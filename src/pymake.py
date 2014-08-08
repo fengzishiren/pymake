@@ -8,14 +8,14 @@ import json
 import os
 import logging
 import sys
-from settings import COMPILER, OUTPUT, INPUT, TARGET
+import ConfigParser
+import subprocess
+from datetime import datetime
+import time
 
 
 '''
-编译所有更新或受到更新影响的文件
-编译编译依赖且.o的文件
-更详细的说：
-        编译所有存在更新的源文件和受引用更新文件的源文件以及编译依赖不存在.o文件的源文件
+编译所有存在更新的源文件和受引用更新直接或间接影响的源文件以及编译依赖不存在.o文件的源文件
         
         
 处理步骤：
@@ -31,8 +31,9 @@ from settings import COMPILER, OUTPUT, INPUT, TARGET
 
 
 MAKE_FILE = '.mk'
+CONFIG_FILE = 'build.cfg'
 
-FILE_PINS = {}
+FILE_STAMP = {}
 # HEAD_REGEX = r'^#include "(\w+.h)"$'
 
 logger = logging.getLogger(__name__)
@@ -41,19 +42,21 @@ ch = logging.StreamHandler(sys.stdout)
 ch.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 ch.setLevel(logging.DEBUG)
 logger.addHandler(ch)
-# 
-# class Config:
-#     parser = ConfigParser.ConfigParser()
-#     parser.read('build.cfg')
-#     @classmethod
-#     def get(cls, section, option):
-#         return cls.parser.get(section, option)
-#     @classmethod
-#     def sections(cls):
-#         return cls.parser.sections()
-#     @classmethod
-#     def options(cls, section):
-#         return cls.parser.options(section)
+ 
+class Config(object):
+    @classmethod
+    def load_config(cls, cfg = CONFIG_FILE):
+        parser = ConfigParser.ConfigParser()
+        parser.read(cfg)
+        
+        cls.INPUT = parser.get('basic', 'input')
+        cls.OUTPUT = parser.get('basic', 'output')
+        suffix = parser.get('basic', 'exesuff')
+        
+        cls.COMPILER = {opt: parser.get('compiler', opt) for opt in parser.options('compiler')}
+        
+        cls.BUILD = {opt + '.' + suffix: parser.get('build', opt).split('|') for opt in parser.options('build')}
+       
     
 class Recorder(object):
 
@@ -128,7 +131,7 @@ class HeadSet(object):
         
         
     
-def get_diffs(origin={}, _dir=INPUT):
+def get_diffs(origin, _dir):
     '''
      获取指定目录下所有更新的源文件以及包含更新源文件的源文件
     '''
@@ -139,8 +142,8 @@ def get_diffs(origin={}, _dir=INPUT):
     
     # name_conts = [(name, get_content(name)) for name in files]
     prints = {name: get_timestamp(os.path.join(_dir, name)) for name in files}
-    global FILE_PINS
-    FILE_PINS.update(prints)
+    global FILE_STAMP
+    FILE_STAMP.update(prints)
     # 比对原始和最新的时间戳 过滤出所有变化的文件
     diff_pins = filter(lambda (name, pin): origin.get(name, 0.0) < pin, prints.items())
     if not diff_pins:
@@ -176,27 +179,15 @@ def get_diffs(origin={}, _dir=INPUT):
     
 class CommandBuilder(object):
     # g++ -O0 -g3 -Wall -c -fmessage-length=0 
-    COMPILE_CMD = '%(name)s -O%(opt)s -g%(debug)s %(warn)s -c %(other)s -o %(out)s %(input)s'
-    LINK_CMD = '%(name)s -o %(target)s %(inputs)s'
+    COMPILE_CMD = '%(cc)s %(cflags)s -o %(out)s %(input)s'
+    LINK_CMD = '%(cc)s %(lflags)s -o %(target)s %(inputs)s'
     def __init__(self):
-        self.command = {}
-        self.command['name'] = COMPILER['name']
-        
-        opt = COMPILER.get('optimization')
-        deb = COMPILER.get('debugging')
-        warn = COMPILER.get('warning')
-        other = COMPILER.get('other')
-        
-        self.command['opt'] = opt if opt else 0
-        self.command['debug'] = deb if deb else 0
-        self.command['warn'] = '-Wall' if warn and warn == True else ''
-        self.command['other'] = other if other else ''
-        
+        self.command = Config.COMPILER
         
     def build_commands(self, diffs, target):
         comps = self.__merge(diffs, target)
-        out = lambda arg: os.path.join(OUTPUT, arg.split('.')[0] + '.o')
-        _in = lambda arg: os.path.join(INPUT, arg)
+        out = lambda arg: os.path.join(Config.OUTPUT, arg.split('.')[0] + '.o')
+        _in = lambda arg: os.path.join(Config.INPUT, arg)
         tasks = []
         for fn in comps:
             dots = _in(fn)
@@ -224,7 +215,7 @@ class CommandBuilder(object):
         logger.debug('merge diff and depends')
         depends = set(reduce(lambda x, y: x + y, target.values()))
         logger.debug('depends: %s', ' '.join(depends))
-        out = lambda arg: os.path.join(OUTPUT, arg.split('.')[0] + '.o')
+        out = lambda arg: os.path.join(Config.OUTPUT, arg.split('.')[0] + '.o')
         logger.debug('comps: %s', ' '.join(comps))
         #comps.extend()
         comps.extend([dep for dep in depends if dep not in diffs and not os.path.exists(out(dep))])
@@ -232,31 +223,33 @@ class CommandBuilder(object):
         return comps        
             
 
+
 def execute(cmds=[]):
+    
     # doit = lambda task: os.popen(cmd).read()
-    doit = lambda x:x
-    return '\n'.join(map(doit, cmds))    
+    doit = lambda x:say(x)
+    return map(doit, cmds)    
 
 def say(x):
     print x
     return x
 
 def main(*args, **kwargs):
-
+    Config.load_config()
     recorder = Recorder()
     builder = CommandBuilder()
-
     origin = recorder.read()
-    diffs = get_diffs(origin)
-    
-    cmds = builder.build_commands(diffs, TARGET)
+    diffs = get_diffs(origin, Config.INPUT)
+    cmds = builder.build_commands(diffs, Config.BUILD)
     # tasks, upfiles = CommandBuilder().__get_comand(diffs, *TARGET['hello.exe'], target='hello.exe')
-    rv = execute(cmds)
-    print 'rv:\n', rv, '\n'
-    recorder.update(FILE_PINS)
+    execute(cmds)
+#     print 'rv:\n', rv, '\n'
+    recorder.update(FILE_STAMP)
 
 if __name__ == '__main__':
     logger.debug('start')
+    start = time.time()
     main()
+    print 'time %.3f' % (time.time() - start)
     logger.debug('end')
     
