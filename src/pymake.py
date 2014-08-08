@@ -9,8 +9,6 @@ import os
 import logging
 import sys
 import ConfigParser
-import subprocess
-from datetime import datetime
 import time
 
 
@@ -29,19 +27,24 @@ import time
 '''
 
 
+__all__ = []
+__version__ = 0.1
+__date__ = '2014-08-08'
+__updated__ = '2014-08-08'
 
 MAKE_FILE = '.mk'
 CONFIG_FILE = 'build.cfg'
+MAKE_LOG = 'mk.log'
 
 FILE_STAMP = {}
 # HEAD_REGEX = r'^#include "(\w+.h)"$'
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler(sys.stdout)
-ch.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-ch.setLevel(logging.DEBUG)
-logger.addHandler(ch)
+hdr = logging.FileHandler(MAKE_LOG)
+hdr.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+hdr.setLevel(logging.DEBUG)
+logger.addHandler(hdr)
  
 class Config(object):
     @classmethod
@@ -247,9 +250,9 @@ def main(*args, **kwargs):
     recorder.update(FILE_STAMP)
 
 if __name__ == '__main__':
-    logger.debug('start')
+    logger.debug('make start')
     start = time.time()
     main()
     print 'time %.3f' % (time.time() - start)
-    logger.debug('end')
+    logger.debug('make end')
     
