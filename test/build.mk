@@ -4,15 +4,15 @@ output = debug
 exesuff = out
 
 [compiler]
-cc = gcc
+cc = g++
 cflags = -O0 -g3 -Wall -c -fmessage-length=0
 lflags =
 #libs = 
 
 
 [build]
-hello = main.cc|lexer.cc|engine.cc|alarm.cc
-test = lexer.cc|engine.cc|alarm.cc
+hello = main.cc|parser.cc|lexer.cc|engine.cc|alarm.cc
+#test = lexer.cc|engine.cc|alarm.cc
 
 #[run]
 #main = hello

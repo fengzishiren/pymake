@@ -15,7 +15,7 @@ class Config(object):
     COMPILER = 'compiler'
     def __init__(self):
         parser = ConfigParser.ConfigParser()
-        parser.read('build.cfg')
+        parser.read('build.mk')
         
         self.INPUT = parser.get(self.BASIC, 'input')
         self.OUTPUT = parser.get(self.BASIC, 'output')
@@ -28,11 +28,9 @@ class Config(object):
 
 class Test(unittest.TestCase):
 
-
-
     def testName(self):
         parser = ConfigParser.ConfigParser()
-        parser.read('build.cfg')
+        parser.read('build.mk')
         secs = parser.sections()
         print '' ==  parser.get('compiler', 'lflags')
         print [(sec, parser.options(sec)) for sec in secs]
