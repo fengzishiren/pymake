@@ -3,13 +3,11 @@ pymake
 
 ##pymake是什么?
 一个可以替代make的C/C++自动化构建工具
-
 向make、ant、maven、gradle致敬
 
 ##pymake具体做什么？
 
 * 通过build.mk文件自动构建项目
-
 * 本次构建的特征数据以json格式存储在.rmk(取remark的缩写)文件
 * 控制太仅仅会输出构建项目中的编译命令
 * 项目的构建详细日志输出至文件mk.log
