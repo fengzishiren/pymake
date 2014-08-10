@@ -7,7 +7,6 @@ Created on 2014年8月5日
 import json
 import os
 import logging
-import sys
 import ConfigParser
 import time
 
@@ -50,8 +49,9 @@ class Config(object):
     @classmethod
     def load_config(cls, cfg = CONFIG_FILE):
         parser = ConfigParser.ConfigParser()
-        parser.read(cfg)
-        
+        ret = parser.read(cfg)
+        if not ret:
+            raise Exception('File Not Found "%s"' % cfg)
         cls.INPUT = parser.get('basic', 'input')
         cls.OUTPUT = parser.get('basic', 'output')
         suffix = parser.get('basic', 'exesuff')
@@ -191,6 +191,8 @@ class CommandBuilder(object):
         comps = self.__merge(diffs, target)
         out = lambda arg: os.path.join(Config.OUTPUT, arg.split('.')[0] + '.o')
         _in = lambda arg: os.path.join(Config.INPUT, arg)
+        adjust = lambda arg: ' '.join(filter(lambda x:x, arg.split(' ')))
+ 
         tasks = []
         for fn in comps:
             dots = _in(fn)
@@ -199,12 +201,14 @@ class CommandBuilder(object):
             doto = out(fn)
             self.command['out'] = doto
             self.command['input'] = dots
-            tasks.append(self.COMPILE_CMD % self.command)
+            cmd = self.COMPILE_CMD % self.command
+            tasks.append(adjust(cmd))
         
         for fn, deps in target.items():
             self.command['inputs'] = ' '.join(map(out, deps))
-            self.command['target'] = fn
-            tasks.append(self.LINK_CMD % self.command)
+            self.command['target'] = os.path.join(Config.OUTPUT, fn)
+            cmd = self.LINK_CMD % self.command
+            tasks.append(adjust(cmd))
             
         return tasks;
     
@@ -228,13 +232,13 @@ class CommandBuilder(object):
 
 
 def execute(cmds=[]):
-    
-    # doit = lambda task: os.popen(cmd).read()
-    doit = lambda x:say(x)
+    doit = lambda cmd: os.popen(say(cmd)).read()
+    #doit = lambda x:say(x)
     return map(doit, cmds)    
 
 def say(x):
     print x
+    logger.debug(x)
     return x
 
 def main(*args, **kwargs):
@@ -251,8 +255,12 @@ def main(*args, **kwargs):
 
 if __name__ == '__main__':
     logger.debug('make start')
-    start = time.time()
-    main()
-    print 'time %.3f' % (time.time() - start)
+    try:
+        start = time.time()
+        main()
+        print 'time %.3f' % (time.time() - start)
+    except Exception, e:
+        logger.exception(e)
+        print e
     logger.debug('make end')
     
