@@ -34,6 +34,7 @@ __updated__ = '2014-08-08'
 RECORD_FILE = '.rmk'
 CONFIG_FILE = 'build.mk'
 MAKE_LOG = 'mk.log'
+SRC_SUFFIX = '.cc'
 
 FILE_STAMP = {}
 # HEAD_REGEX = r'^#include "(\w+.h)"$'
@@ -118,7 +119,7 @@ class HeadSet(object):
         # maybe sytanx error!
         if not refs:
             return list()
-        dotcc = filter(lambda it: it.endswith('.cc'), refs)
+        dotcc = filter(lambda it: it.endswith(SRC_SUFFIX), refs)
         doths = filter(lambda it: it.endswith('.h'), refs)
         # add passed
         self.passed.add(doth)
@@ -140,7 +141,7 @@ def get_diffs(origin, _dir):
     '''
     logger.debug('Dir: %s', ' '.join(os.listdir(_dir)))
     
-    files = [name for name in os.listdir(_dir) if name.endswith('.h') or name.endswith('.cc')]
+    files = [name for name in os.listdir(_dir) if name.endswith('.h') or name.endswith(SRC_SUFFIX)]
     logger.debug('List of files: %s' % ' '.join(files))
     
     # name_conts = [(name, get_content(name)) for name in files]
@@ -156,7 +157,7 @@ def get_diffs(origin, _dir):
     diff_files = zip(*diff_pins)[0]
     logger.debug('List of changed files: %s', ' '.join(diff_files))
 
-    compiles = list(filter(lambda name: name.endswith('.cc'), diff_files))
+    compiles = list(filter(lambda name: name.endswith(SRC_SUFFIX), diff_files))
     
     hs = HeadSet()
     diff_hfiles = filter(lambda name: name.endswith('.h'), diff_files)
