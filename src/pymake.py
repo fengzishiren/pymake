@@ -31,8 +31,8 @@ __version__ = 0.1
 __date__ = '2014-08-08'
 __updated__ = '2014-08-08'
 
-MAKE_FILE = '.mk'
-CONFIG_FILE = 'build.cfg'
+RECORD_FILE = '.rmk'
+CONFIG_FILE = 'build.mk'
 MAKE_LOG = 'mk.log'
 
 FILE_STAMP = {}
@@ -64,7 +64,7 @@ class Config(object):
 class Recorder(object):
 
     def write(self, data={}):
-        with open(MAKE_FILE, "w") as f:
+        with open(RECORD_FILE, "w") as f:
             f.write(json.dumps(data));
             
     def update(self, data={}):
@@ -73,9 +73,9 @@ class Recorder(object):
         self.write(_data)
         
     def read(self):
-        if not os.path.exists(MAKE_FILE):
+        if not os.path.exists(RECORD_FILE):
             return dict()
-        with open(MAKE_FILE, "r") as f:
+        with open(RECORD_FILE, "r") as f:
             return json.loads(f.read())    
 
 def get_timestamp(fn):
