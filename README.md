@@ -1,8 +1,8 @@
 pymake
 ======
 
-##pymake是什么?
-一个可以替代make的C/C++自动化构建工具
+
+pymake是一个可以替代make的C/C++自动化构建工具
 向make、ant、maven、gradle致敬
 
 ##pymake具体做什么？
