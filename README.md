@@ -54,7 +54,7 @@ hello = main.cc|parser.cc|lexer.cc|engine.cc|alarm.cc
 ##有问题反馈
 在使用中有任何问题，欢迎反馈给我，可以用以下联系方式跟我交流
 
-* 邮件(xiaoyaozi106@163.com
+* 邮件(xiaoyaozi106@163.com)
 * 微博: [@小疯子诗人(http://weibo.com/fengzishiren/)
 
 
