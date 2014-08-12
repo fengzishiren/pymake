@@ -56,9 +56,7 @@ class Config(object):
         cls.INPUT = parser.get('basic', 'input')
         cls.OUTPUT = parser.get('basic', 'output')
         suffix = parser.get('basic', 'exesuff')
-        
         cls.COMPILER = {opt: parser.get('compiler', opt) for opt in parser.options('compiler')}
-        
         cls.BUILD = {opt + '.' + suffix: parser.get('build', opt).split('|') for opt in parser.options('build')}
        
     
@@ -140,15 +138,13 @@ def get_diffs(origin, _dir):
      获取指定目录下所有更新的源文件以及包含更新源文件的源文件
     '''
     logger.debug('Dir: %s', ' '.join(os.listdir(_dir)))
-    
     files = [name for name in os.listdir(_dir) if name.endswith('.h') or name.endswith(SRC_SUFFIX)]
     logger.debug('List of files: %s' % ' '.join(files))
-    
     # name_conts = [(name, get_content(name)) for name in files]
     prints = {name: get_timestamp(os.path.join(_dir, name)) for name in files}
     global FILE_STAMP
     FILE_STAMP.update(prints)
-    # 比对原始和最新的时间戳 过滤出所有变化的文件
+    # Compare timstamp
     diff_pins = filter(lambda (name, pin): origin.get(name, 0.0) < pin, prints.items())
     if not diff_pins:
         logger.warn('No files changed!')
@@ -156,12 +152,13 @@ def get_diffs(origin, _dir):
     
     diff_files = zip(*diff_pins)[0]
     logger.debug('List of changed files: %s', ' '.join(diff_files))
-
+    #collect src files exclude .h
     compiles = list(filter(lambda name: name.endswith(SRC_SUFFIX), diff_files))
-    
+    #create instance of HeadSet
     hs = HeadSet()
+    #diff head files
     diff_hfiles = filter(lambda name: name.endswith('.h'), diff_files)
-    # 找出所有更新的头文件的所有关联文件
+    # ind out all associated files for all the updated header files
     file_conts = [get_content(os.path.join(_dir, name)) for name in files]
     for hf in diff_hfiles:
         include = '#include "%s"' % hf
@@ -173,11 +170,11 @@ def get_diffs(origin, _dir):
         hs.add_refs(hf, relfs)
     hs.adjust_refs()
     logger.debug('adjust: %s' % str(hs.table))
-    
+    #extend comiles
     for difls in [hs.search_refs(hf) for hf in diff_hfiles]:
         compiles.extend(difls)
-        
     logger.debug('List of affected files: %s', ''.join(set(compiles)))
+    # Remove duplicate by dict style
     return {}.fromkeys(compiles).keys()
 
     
