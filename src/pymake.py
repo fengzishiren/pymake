@@ -210,7 +210,7 @@ class CommandBuilder(object):
         for fn, deps in target.items():
             inputs = set(map(out, deps))
             target = os.path.join(Config.OUTPUT, fn)
-            if not inputs.issubset(book) and os.path.exists(target):
+            if not [inp for inp in inputs if inp in book] and os.path.exists(target):
                 continue
             self.command['inputs'] = ' '.join(inputs)
             self.command['target'] = target
