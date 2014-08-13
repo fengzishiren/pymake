@@ -55,6 +55,8 @@ class Config(object):
             raise Exception('File Not Found "%s"' % cfg)
         cls.INPUT = parser.get('basic', 'input')
         cls.OUTPUT = parser.get('basic', 'output')
+        if not os.path.exists(Config.OUTPUT):
+            os.makedirs(Config.OUTPUT)
         suffix = parser.get('basic', 'exesuff')
         cls.COMPILER = {opt: parser.get('compiler', opt) for opt in parser.options('compiler')}
         cls.BUILD = {opt + '.' + suffix: parser.get('build', opt).split('|') for opt in parser.options('build')}
@@ -152,11 +154,11 @@ def get_diffs(origin, _dir):
     
     diff_files = zip(*diff_pins)[0]
     logger.debug('List of changed files: %s', ' '.join(diff_files))
-    #collect src files exclude .h
+    # collect src files exclude .h
     compiles = list(filter(lambda name: name.endswith(SRC_SUFFIX), diff_files))
-    #create instance of HeadSet
+    # create instance of HeadSet
     hs = HeadSet()
-    #diff head files
+    # diff head files
     diff_hfiles = filter(lambda name: name.endswith('.h'), diff_files)
     # ind out all associated files for all the updated header files
     file_conts = [get_content(os.path.join(_dir, name)) for name in files]
@@ -170,7 +172,7 @@ def get_diffs(origin, _dir):
         hs.add_refs(hf, relfs)
     hs.adjust_refs()
     logger.debug('adjust: %s' % str(hs.table))
-    #extend comiles
+    # extend comiles
     for difls in [hs.search_refs(hf) for hf in diff_hfiles]:
         compiles.extend(difls)
     logger.debug('List of affected files: %s', ''.join(set(compiles)))
@@ -214,7 +216,6 @@ class CommandBuilder(object):
             self.command['target'] = target
             cmd = self.LINK_CMD % self.command
             tasks.append(adjust(cmd))
-            
         return tasks;
     
     
@@ -228,6 +229,7 @@ class CommandBuilder(object):
         logger.debug('merge diff and depends')
         depends = set(reduce(lambda x, y: x + y, target.values()))
         logger.debug('depends: %s', ' '.join(depends))
+
         out = lambda arg: os.path.join(Config.OUTPUT, arg.split('.')[0] + '.o')
         _in = lambda arg: os.path.join(Config.INPUT, arg)
 
