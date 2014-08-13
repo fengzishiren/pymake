@@ -47,7 +47,7 @@ logger.addHandler(hdr)
  
 class Config(object):
     @classmethod
-    def load_config(cls, cfg = CONFIG_FILE):
+    def load_config(cls, cfg=CONFIG_FILE):
         parser = ConfigParser.ConfigParser()
         ret = parser.read(cfg)
         if not ret:
@@ -188,25 +188,32 @@ class CommandBuilder(object):
         self.command = Config.COMPILER
         
     def build_commands(self, diffs, target):
+        """
+        没有需要编译的文件且链接的目标文件已存在则返回空list
+        """
         comps = self.__merge(diffs, target)
         out = lambda arg: os.path.join(Config.OUTPUT, arg.split('.')[0] + '.o')
         _in = lambda arg: os.path.join(Config.INPUT, arg)
         adjust = lambda arg: ' '.join(filter(lambda x:x, arg.split(' ')))
  
         tasks = []
+        book = set()
         for fn in comps:
             dots = _in(fn)
-            if not os.path.exists(dots):
-                raise Exception('File Not Found "%s"' % dots)
             doto = out(fn)
             self.command['out'] = doto
             self.command['input'] = dots
+            book.add(doto)
             cmd = self.COMPILE_CMD % self.command
             tasks.append(adjust(cmd))
         
         for fn, deps in target.items():
-            self.command['inputs'] = ' '.join(map(out, deps))
-            self.command['target'] = os.path.join(Config.OUTPUT, fn)
+            inputs = set(map(out, deps))
+            target = os.path.join(Config.OUTPUT, fn)
+            if not inputs.issubset(book) and os.path.exists(target):
+                continue
+            self.command['inputs'] = ' '.join(inputs)
+            self.command['target'] = target
             cmd = self.LINK_CMD % self.command
             tasks.append(adjust(cmd))
             
@@ -217,23 +224,30 @@ class CommandBuilder(object):
         '''
         合并受更新影响的文件和编译依赖文件
         依赖文件编译要求： 如果依赖文件没有受到更新影响 而且.o文件存在则什么也不做 否则编译依赖文件
+        注意：确定源文件存在
         '''
         comps = diffs
         logger.debug('merge diff and depends')
         depends = set(reduce(lambda x, y: x + y, target.values()))
         logger.debug('depends: %s', ' '.join(depends))
         out = lambda arg: os.path.join(Config.OUTPUT, arg.split('.')[0] + '.o')
-        logger.debug('comps: %s', ' '.join(comps))
-        #comps.extend()
-        comps.extend([dep for dep in depends if dep not in diffs and not os.path.exists(out(dep))])
-        logger.debug('extend comps: %s', ' '.join(comps))
-        return comps        
-            
+        _in = lambda arg: os.path.join(Config.INPUT, arg)
 
+        logger.debug('comps: %s', ' '.join(comps))
+        # comps.extend()
+        comps.extend([dep for dep in depends if self.__exists_src(_in(dep)) and dep not in diffs and not os.path.exists(out(dep))])
+        logger.debug('extend comps: %s', ' '.join(comps))
+        return comps    
+    
+    def __exists_src(self, dots):
+        if not os.path.exists(dots):
+            raise Exception('File Not Found "%s"' % dots)
+        return True
+            
 
 def execute(cmds=[]):
     doit = lambda cmd: os.popen(say(cmd)).read()
-    #doit = lambda x:say(x)
+    # doit = lambda x:say(x)
     return map(doit, cmds)    
 
 def say(x):
