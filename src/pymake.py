@@ -34,7 +34,7 @@ __updated__ = '2014-08-08'
 RECORD_FILE = '.rmk'
 CONFIG_FILE = 'build.mk'
 MAKE_LOG = 'mk.log'
-SRC_SUFFIX = '.cc'
+SRC_SUFFIX = ('c', 'cc', 'cpp')
 
 FILE_STAMP = {}
 # HEAD_REGEX = r'^#include "(\w+.h)"$'
@@ -79,14 +79,6 @@ class Recorder(object):
         with open(RECORD_FILE, "r") as f:
             return json.loads(f.read())    
 
-def get_timestamp(fn):
-    return os.path.getmtime(fn)
-
-def get_content(fn):
-    with open(fn, "r") as f:
-        content = f.read()
-    return content
-
         
 class HeadSet(object):
     '''
@@ -119,7 +111,7 @@ class HeadSet(object):
         # maybe sytanx error!
         if not refs:
             return list()
-        dotcc = filter(lambda it: it.endswith(SRC_SUFFIX), refs)
+        dotcc = filter(is_src, refs)
         doths = filter(lambda it: it.endswith('.h'), refs)
         # add passed
         self.passed.add(doth)
@@ -133,14 +125,28 @@ class HeadSet(object):
         refs = self.table.get(fn)
         return refs if refs else set()
         
-        
+
+def get_timestamp(fn):
+    return os.path.getmtime(fn)
+
+
+def get_content(fn):
+    with open(fn, "r") as f:
+        content = f.read()
+    return content
+
+
+def is_src(name):       
+    segs = name.rsplit('.')
+    return segs[-1] in SRC_SUFFIX if segs else False        
+ 
     
 def get_diffs(origin, _dir):
     '''
      获取指定目录下所有更新的源文件以及包含更新源文件的源文件
     '''
     logger.debug('Dir: %s', ' '.join(os.listdir(_dir)))
-    files = [name for name in os.listdir(_dir) if name.endswith('.h') or name.endswith(SRC_SUFFIX)]
+    files = [name for name in os.listdir(_dir) if name.endswith('.h') or is_src(name)]
     logger.debug('List of files: %s' % ' '.join(files))
     # name_conts = [(name, get_content(name)) for name in files]
     prints = {name: get_timestamp(os.path.join(_dir, name)) for name in files}
@@ -155,7 +161,7 @@ def get_diffs(origin, _dir):
     diff_files = zip(*diff_pins)[0]
     logger.debug('List of changed files: %s', ' '.join(diff_files))
     # collect src files exclude .h
-    compiles = list(filter(lambda name: name.endswith(SRC_SUFFIX), diff_files))
+    compiles = list(filter(is_src, diff_files))
     # create instance of HeadSet
     hs = HeadSet()
     # diff head files
@@ -250,10 +256,12 @@ def execute(cmds=[]):
     # doit = lambda x:say(x)
     return map(doit, cmds)    
 
+
 def say(x):
     print x
     logger.debug(x)
     return x
+
 
 def main(*args, **kwargs):
     Config.load_config()
@@ -266,6 +274,7 @@ def main(*args, **kwargs):
     execute(cmds)
 #     print 'rv:\n', rv, '\n'
     recorder.update(FILE_STAMP)
+
 
 if __name__ == '__main__':
     logger.debug('make start')
